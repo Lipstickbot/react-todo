@@ -1,122 +1,151 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 
 export default function App() {
+  // State для задач
   const [todos, setTodos] = useState([]);
-  const [text, setText] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editingText, setEditingText] = useState("");
-  const [sort, setSort] = useState("status"); // status | alpha
+  const [newTodo, setNewTodo] = useState("");
 
-  // ---------- ADD ----------
+  // State для таймера
+  const [seconds, setSeconds] = useState(0);
+
+  // Загрузка задач из localStorage при первом рендере
+  useEffect(() => {
+    const saved = localStorage.getItem("todos");
+    if (saved) {
+      setTodos(JSON.parse(saved));
+    }
+  }, []);
+
+  // Сохранение задач в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem("todos", JSON.stringify(todos));
+  }, [todos]);
+
+  // Таймер
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds(prev => prev + 1), 1000);
+    return () => clearInterval(timer); // cleanup
+  }, []);
+
+  // Добавление задачи
   const addTodo = () => {
-    if (!text.trim()) return;
-    setTodos([...todos, { id: Date.now(), text, completed: false }]);
-    setText("");
+    if (!newTodo.trim()) return;
+    setTodos([
+      ...todos,
+      { id: Date.now(), text: newTodo.trim(), done: false }
+    ]);
+    setNewTodo("");
   };
 
-  // ---------- TOGGLE ----------
-  const toggleTodo = (id) => {
+  // Удаление задачи
+  const removeTodo = (id) => {
+    setTodos(todos.filter(todo => todo.id !== id));
+  };
+
+  // Переключение выполнения
+  const toggleDone = (id) => {
     setTodos(
-      todos.map((t) =>
-        t.id === id ? { ...t, completed: !t.completed } : t
+      todos.map(todo =>
+        todo.id === id ? { ...todo, done: !todo.done } : todo
       )
     );
   };
 
-  // ---------- DELETE ----------
-  const deleteTodo = (id) => {
-    setTodos(todos.filter((t) => t.id !== id));
-  };
-
-  // ---------- EDIT ----------
-  const saveEdit = (id) => {
+  // Редактирование текста
+  const editTodo = (id, newText) => {
     setTodos(
-      todos.map((t) => (t.id === id ? { ...t, text: editingText } : t))
+      todos.map(todo => (todo.id === id ? { ...todo, text: newText } : todo))
     );
-    setEditingId(null);
   };
 
-  // ---------- SORT ----------
-  const sortedTodos = [...todos].sort((a, b) => {
-    if (sort === "status") return a.completed - b.completed;
-    return a.text.localeCompare(b.text);
-  });
-
-  // ---------- STATS ----------
+  // Статистика
   const total = todos.length;
-  const completed = todos.filter((t) => t.completed).length;
-  const active = total - completed;
-  const progress = total ? (completed / total) * 100 : 0;
+  const doneCount = todos.filter(t => t.done).length;
+  const leftCount = total - doneCount;
+  const percent = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+
+  // Таймер в мин/сек
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
 
   return (
-    <div className="app">
-      <h1>✅ Todo App</h1>
+    <div className="container">
+      <h1>Todo App</h1>
 
-      {/* ADD */}
-      <div className="add">
+      <div className="add-todo">
         <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addTodo()}
-          placeholder="Новая задача..."
+          value={newTodo}
+          onChange={e => setNewTodo(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && addTodo()}
+          placeholder="Добавьте задачу..."
         />
         <button onClick={addTodo}>+</button>
       </div>
 
-      {/* SORT */}
-      <div className="sort">
-        <button onClick={() => setSort("status")}>По статусу</button>
-        <button onClick={() => setSort("alpha")}>По алфавиту</button>
-      </div>
-
-      {/* LIST */}
-      <ul className="list">
-        {sortedTodos.map((todo) => (
-          <li key={todo.id} className={todo.completed ? "done" : ""}>
+      <ul className="todo-list">
+        {todos.map(todo => (
+          <li key={todo.id} className={todo.done ? "done" : ""}>
             <input
               type="checkbox"
-              checked={todo.completed}
-              onChange={() => toggleTodo(todo.id)}
+              checked={todo.done}
+              onChange={() => toggleDone(todo.id)}
             />
-
-            {editingId === todo.id ? (
-              <input
-                className="edit"
-                autoFocus
-                value={editingText}
-                onChange={(e) => setEditingText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveEdit(todo.id);
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-              />
-            ) : (
-              <span
-                onDoubleClick={() => {
-                  setEditingId(todo.id);
-                  setEditingText(todo.text);
-                }}
-              >
-                {todo.text}
-              </span>
-            )}
-
-            <button onClick={() => deleteTodo(todo.id)}>×</button>
+            <EditableText
+              text={todo.text}
+              onSave={(newText) => editTodo(todo.id, newText)}
+            />
+            <button onClick={() => removeTodo(todo.id)}>×</button>
           </li>
         ))}
       </ul>
 
-      {/* STATS */}
       <div className="stats">
-        <p>Все: {total}</p>
-        <p>Активные: {active}</p>
-        <p>Выполнено: {completed}</p>
+        <p>Всего: {total}</p>
+        <p>Выполнено: {doneCount}</p>
+        <p>Осталось: {leftCount}</p>
+        <p>Прогресс: {percent}%</p>
+      </div>
 
-        <div className="progress">
-          <div style={{ width: `${progress}%` }} />
-        </div>
+      <div className="timer">
+        Вы в приложении: {minutes} мин {secs} сек
       </div>
     </div>
+  );
+}
+
+// Компонент для редактируемого текста
+function EditableText({ text, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(text);
+
+  useEffect(() => {
+    setValue(text);
+  }, [text]);
+
+  const save = () => {
+    if (value.trim() === "") setValue(text);
+    else onSave(value.trim());
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setValue(text);
+    setEditing(false);
+  };
+
+  return editing ? (
+    <input
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => {
+        if (e.key === "Enter") save();
+        if (e.key === "Escape") cancel();
+      }}
+      autoFocus
+    />
+  ) : (
+    <span onDoubleClick={() => setEditing(true)}>{text}</span>
   );
 }
